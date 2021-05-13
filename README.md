@@ -100,7 +100,6 @@ follows:
     # finally, create action_size output channel
     self.fully_connected_2 = nn.Linear(1024, action_size)
 ```
-The network is visualized as shown below:
 ![alt text](./dqn_conv.png)
 
 #### Results

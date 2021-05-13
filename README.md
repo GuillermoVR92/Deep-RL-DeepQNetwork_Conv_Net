@@ -1,15 +1,9 @@
-[//]: # (Image References)
-
-[image1]: https://user-images.githubusercontent.com/10624937/42135619-d90f2f28-7d12-11e8-8823-82b970a54d7e.gif "Trained Agent"
-
 ### Udacity Deep Reinforcment Learning Nanodegree 
-# Project 1: Navigation
+# Project: Navigation with full Conv Net, from pixels to actions
 
 ### Introduction
 
 For this project, you will train an agent to navigate (and collect bananas!) in a large, square world.  
-
-![Trained Agent][image1]
 
 A reward of +1 is provided for collecting a yellow banana, and a reward of -1 is provided for collecting a blue banana.  Thus, the goal of your agent is to collect as many yellow bananas as possible while avoiding blue bananas.  
 
@@ -23,21 +17,12 @@ The task is episodic, and in order to solve the environment, your agent must get
 
 ### Files and Folders
 * navigation.py: the main routine for the basic-banana project. It is the high-level calls to construct the environment, agent, train and play. 
-* visual_navigation.py: the main routine for the challenge project - visual banana.
-* dqn.py: the deep reinforcement learning algorithm routine.
-* dqn_agent.py: the class definitions of the agent and replay buffer.
-* model.py: the deep neural network models are defined in this file.
+* dqn_functions.py: the deep reinforcement learning algorithm routine.
+* nav_dqn_agent_pixels.py: the class definitions of the DQN agent and replay buffer.
+* model_pixels.py: the deep neural network models (DQN) are defined in this file.
 * Environment.py: a wrapper for the UnityEnvironment. The wrapper makes the 
 environment interface similar to the OpenAI gym environment, so that 
 the DQN routines are more general.
-* dqn_test.py: a dqn test routine using the OpenAI gym environment (can be ignored).
-* folder ``basic_banana``: the directory to save the unity environment run time of the basic agent in
- sensor mode.
-* folder ``visual_banana``: the directory to save the unity environment run time of the agent in
- pixel/visual mode.
-* PlotScores.ipynb: the routine to plot the scores.
-* basic_banana_dqn_checkpoint.pth: saved weights for basic banana.
-* visual_banana_dqn_checkpoint.pth: saved weights for the challenge project. (achieved average score 13.03 in 985 episodes)
  
 #### Environment Wrapper Class
 The ``CollectBanana`` Class is a wrapper for the ``UnityEnvironment`` class, which 
@@ -49,10 +34,8 @@ includes the following main methods:
 
 The ``name`` parameter in the 
 constructor allows the selection of ``state`` format returned:
-* For basic banana, the state is a 37-dimensional vector.
-```self.state = self.env_info.vector_observations[0]```
 
-* For visual banana, the state contains four frames by calling ``get_state()``. 
+* The state contains four frames by calling ``get_state()``. 
 To fit the PyTorch format, the original frame format is transposed from NHWC (Batch, Height, Width, Channels) to NCHW 
  by numpy transpose function as follows:
 ``frame = np.transpose(self.env_info.visual_observations[0], (0,3,1,2))`` 
@@ -63,28 +46,24 @@ are then assemblied into variable ``CollectBanana.state`` variable.
 
 The DQN used in this implementation is the simple DQN with two networks: one is local, and one is target.
 
-In dqn_agent.py, the network is created with these lines:
+In nav_dqn_agent_pixels.py, the network is created with these lines:
 ```python
-if qnetwork_type=='visual_banana':
-    self.qnetwork_local = VisualQNetwork(state_size, action_size, seed).to(device)
-    self.qnetwork_target = VisualQNetwork(state_size, action_size, seed).to(device)
-else:
-    self.qnetwork_local = BasicQNetwork(state_size, action_size, seed).to(device)
-    self.qnetwork_target = BasicQNetwork(state_size, action_size, seed).to(device)
+    self.qnetwork_local = QNetworkFull(state_size, action_size, seed).to(device)
+    self.qnetwork_target = QNetworkFull(state_size, action_size, seed).to(device)
 ```
 
 For both basic- and visual-banana project, the training parameters are as follows:
 
-In the dqn.py: Class DQN train() method:
+In the dqn_functions.py: function dqn_train() method:
 ```python
 n_episodes=2000, max_t=1000, eps_start=1.0,
 eps_end=0.01, eps_decay=0.995,
 score_window_size=100, target_score=13.0
 ```
 
-In the dqn_agent.py file: the Agent class has parameters to learn():
+In the nav_dqn_agent_pixels.py file: the Agent class has parameters to learn():
 ```python
-BUFFER_SIZE = int(10000)  # replay buffer size
+BUFFER_SIZE = int(1e4)  # replay buffer size
 BATCH_SIZE = 64         # minibatch size
 
 GAMMA = 0.99            # discount factor
@@ -96,86 +75,53 @@ UPDATE_EVERY = 4        # how often to update the network
 #### Neural Network Models
 
 The neural networks are defined in the model.py file. It contains two classes: 
-* BasicQNetwork: it contains two fully connected layers. Each layer contains 128 neurons. 
-```python
-x = F.relu(self.fc1(state))
-x = F.relu(self.fc2(x))
-return self.fc3(x)
-```
 * VisualQNetwork
 The visualQNetwork employs three 3D convolutional layers and 2 fully connected layers. It is defined as 
 follows:
 ```python
-    nfilters = [128, 128*2, 128*2]
-    self.seed = torch.manual_seed(seed)
-    self.conv1 = nn.Conv3d(3, nfilters[0], kernel_size=(1, 3, 3), stride=(1,3,3))
-    self.bn1 = nn.BatchNorm3d(nfilters[0])
-    self.conv2 = nn.Conv3d(nfilters[0], nfilters[1], kernel_size=(1, 3, 3), stride=(1,3,3))
-    self.bn2 = nn.BatchNorm3d(nfilters[1])
-    self.conv3 = nn.Conv3d(nfilters[1], nfilters[2], kernel_size=(4, 3, 3), stride=(1,3,3))
-    self.bn3 = nn.BatchNorm3d(nfilters[2])
-    conv_out_size = self._get_conv_out_size(state_size)
-    fc = [conv_out_size, 1024]
-    self.fc1 = nn.Linear(fc[0], fc[1])
-    self.fc2 = nn.Linear(fc[1], action_size)
+    n_filter_1 = 128
+    n_filter_2 = 256
+    n_filter_3 = 256
+    # NHWC (Batch, Height, Width, Channels)
+
+    self.conv_layer_1 = nn.Conv3d(in_channels=3, out_channels=n_filter_1, kernel_size=(1, 2, 2), stride=(1, 2, 2))
+    self.maxpool_1 = nn.MaxPool3d(kernel_size=(1, 2, 2), stride=(1, 2, 2))
+    self.batch_norm_1 = nn.BatchNorm3d(n_filter_1)
+
+    self.conv_layer_2 = nn.Conv3d(in_channels=n_filter_1, out_channels=n_filter_2, kernel_size=(1, 2, 2), stride=(1, 2, 2))
+    self.batch_norm_2 = nn.BatchNorm3d(n_filter_2)
+
+    self.conv_layer_3 = nn.Conv3d(in_channels=n_filter_2, out_channels=n_filter_3, kernel_size=(4, 2, 2), stride=(1, 2, 2))
+    self.batch_norm_3 = nn.BatchNorm3d(n_filter_3)
+
+    conv_net_output_size = self._get_conv_out_size(state_size)
+
+    self.fully_connected_1 = nn.Linear(conv_net_output_size, 1024)     
+    # finally, create action_size output channel
+    self.fully_connected_2 = nn.Linear(1024, action_size)
 ```
 The network is visualized as shown below:
 ![alt text](./VisualDQN.png)
 
 #### Results
 
-##### Basic Banana
-```angular2html
-Episode 100	Average Score: 0.555
-Episode 200	Average Score: 3.00
-Episode 300	Average Score: 6.85
-Episode 400	Average Score: 9.35
-Episode 500	Average Score: 11.72
-Episode 600	Average Score: 12.46
-Episode 700	Average Score: 12.69
-Episode 709	Average Score: 12.91
-Environment solved in 710 episodes!	Average Score: 13.01
-```
-![alt text](./basic_banana_scores.png)
-
 ##### Visual Banana
 ```angular2html
-Episode 100	Average Score: 0.133
-Episode 200	Average Score: 0.89
-Episode 300	Average Score: 2.66
-Episode 400	Average Score: 5.50
-Episode 500	Average Score: 8.63
-Episode 600	Average Score: 9.60
-Episode 700	Average Score: 11.16
-Episode 800	Average Score: 11.36
-Episode 900	Average Score: 12.13
-Episode 984	Average Score: 12.94
-Environment solved in 985 episodes!	Average Score: 13.03
+Episode 100	Average Score: 0.255
+Episode 200	Average Score: 2.70
+Episode 300	Average Score: 5.45
+Episode 400	Average Score: 8.95
+Episode 500	Average Score: 10.62
+Episode 600	Average Score: 11.36
+Episode 700	Average Score: 12.29
+Episode 832	Average Score: 13.01
+Environment solved in 832 episodes!	Average Score: 13.01
 ```
-![alt text](./visual_banana_scores.png)
 
-
-See the trained agent in action on Youtube:
-
-<div align="center">
-  <a href="https://youtu.be/vC5tQfu-U1Y">
-  <img src="http://img.youtube.com/vi/vC5tQfu-U1Y/0.jpg" alt="IMAGE ALT TEXT"></a>
-</div>
-
-#### Ideas for future improvements
+#### Ideas learnt
 From the challenge project, I observed the following:
-* Color images are better than than the gray scale images, because the bananas are in yellow and blue, also 
-the background wall, floor, and sky. It is hard to distinquish them with only gray pictures.
-* Using multiple frames instead of single one. I used four frames and it improves the results a lot.
-* Using 3D convolutional layers yields bettter results than 2D in my test. That perhaps because the 
-input state are multiple images and temporal relationships. 3D filters are keen to detect the local
-motion patterns.
-* The number of filters cannot be too small. I used 128, 256, 256 in these layers, which are much 
-better than small numbers that I tried earlier, such as 32, 64, 64. 
-
-For future improvements - the challenge project:
-* The agent could be able to achieve higher score if trained longer
-* Using other advanced DQN, such as double, dueling, replay buffer prioritization, rainbow, etc. 
+* The use of 3D convolutional layers improves performance in the training process.
+* Max Pooling 3D helps diminish the number of weights to be learnt.
 
 ## Project Instruction from Udacity
 ### Getting Started
